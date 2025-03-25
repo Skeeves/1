@@ -2,43 +2,50 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/gorilla/mux"
 	"net/http"
 )
 
-var task string
+func CreateTask(w http.ResponseWriter, r *http.Request) {
+	var newTask Task
 
-type requestBody struct {
-	Task string `json:"task"`
-}
-
-func HelloHandler(w http.ResponseWriter, r *http.Request) {
-	response := fmt.Sprintf("Hello, %s", task)
-	fmt.Fprintln(w, response)
-}
-
-func PostTaskHandler(w http.ResponseWriter, r *http.Request) {
-	var reqBody requestBody
-
-	err := json.NewDecoder(r.Body).Decode(&reqBody)
+	err := json.NewDecoder(r.Body).Decode(&newTask)
 	if err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	task = reqBody.Task
+	result := DB.Create(&newTask)
+	if result.Error != nil {
+		http.Error(w, "Failed to create task", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(newTask)
+}
+
+func GetTask(w http.ResponseWriter, r *http.Request) {
+	var tasks []Task
+
+	result := DB.Find(&tasks)
+	if result.Error != nil {
+		http.Error(w, "Failed to fetch tasks", http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "Task updated successfully")
+	json.NewEncoder(w).Encode(tasks)
 }
 
 func main() {
 
+	InitDB()
+
+	DB.AutoMigrate(&Task{})
+
 	router := mux.NewRouter()
-
-	router.HandleFunc("/api/hello", HelloHandler).Methods("GET")
-	router.HandleFunc("/api/task", PostTaskHandler).Methods("POST")
-
+	router.HandleFunc("/api/tasks", CreateTask).Methods("POST")
+	router.HandleFunc("/api/tasks", GetTask).Methods("GET")
 	http.ListenAndServe(":8080", router)
 }
